@@ -1,0 +1,3 @@
+requests
+esgfpid
+ESGConfigParser==1.0.0a1

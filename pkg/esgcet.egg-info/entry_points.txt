@@ -1,0 +1,10 @@
+[console_scripts]
+esgindexpub = esgcet.esgindexpub:main
+esgmapconv = esgcet.esgmapconv:main
+esgmigrate = esgcet.esgmigrate:main
+esgmkpubrec = esgcet.esgmkpubrec:main
+esgpidcitepub = esgcet.esgpidcitepub:main
+esgpublish = esgcet.pub_internal:main
+esgunpublish = esgcet.esgunpublish:main
+esgupdate = esgcet.esgupdate:main
+
