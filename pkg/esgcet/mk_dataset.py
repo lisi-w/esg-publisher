@@ -174,21 +174,17 @@ def get_scanfile_dict(scandata):
 
 def update_metadata(record, scanobj):
     if "variables" in scanobj:
-        if "variable_id" in record:
 
-            vid = record["variable_id"]
-            var_rec = scanobj["variables"][vid]
-            if "long_name" in var_rec.keys():
-                record["variable_long_name"] = var_rec["long_name"]
-            elif "info" in var_rec:
-                record["variable_long_name"] = var_rec["info"]
-            if "standard_name" in var_rec:
-                record["cf_standard_name"] = var_rec["standard_name"]
-            record["variable_units"] = var_rec["units"]
-            record["variable"] = vid
-        else:
-            eprint("TODO check project settings for variable extraction")
-            record["variable"] = "Multiple"
+        vid = list(scanobj["variables"].keys())[0]
+        var_rec = scanobj["variables"][vid]
+        if "long_name" in var_rec.keys():
+            record["variable_long_name"] = var_rec["long_name"]
+        elif "info" in var_rec:
+            record["variable_long_name"] = var_rec["info"]
+        if "standard_name" in var_rec:
+            record["cf_standard_name"] = var_rec["standard_name"]
+        record["variable_units"] = var_rec["units"]
+        record["variable"] = vid
     else:
         eprint("WARNING: no variables were extracted (is this CF compliant?)")
 
