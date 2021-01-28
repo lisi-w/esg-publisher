@@ -241,11 +241,13 @@ def run(fullmap):
     idx = outname.rfind('.')
 
     scans = []
+    variables = []
     if proj == 'CREATE-IP':
-        variables = []
         files = os.listdir(destpath)
         for f in files:
-            variables.append(f.split('_')[0])
+            var = f.split('_')[0]
+            if var not in variables:
+                variables.append(var)
         for var in variables:
             scans.append(tempfile.NamedTemporaryFile())  # create a temporary file which is deleted afterward for autocurator
             scan = scans[-1].name
@@ -279,6 +281,9 @@ def run(fullmap):
                 print("Error making dataset: " + str(ex), file=sys.stderr)
                 exit_cleanup(scan_file, scans)
                 exit(1)
+            # only use first scan file if more than 75 variables
+            if len(variables) > 75:
+                break
     else:
         try:
             if third_arg_mkd:
