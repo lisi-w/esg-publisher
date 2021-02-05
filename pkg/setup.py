@@ -8,7 +8,7 @@ import configparser as cfg
 from shutil import copyfile
 
 
-VERSION = '5.0.0a6'
+VERSION = '5.0.0a7'
 print("esgcet version =", VERSION)
 HOME = str(Path.home())
 FULLPATH = HOME + '/.esg'
@@ -63,9 +63,9 @@ if make_config:
                                           'esgmkpubrec=esgcet.esgmkpubrec:main',
                                           'esgindexpub=esgcet.esgindexpub:main',
                                           'esgpublish=esgcet.pub_internal:main',
-                                          'esgupdate=esgcet.update:main',
-                                          'esgmapconv=esgcet.mapfile:main',
-                                          'esgmigrate=esgcet.migratecmd:main',
+                                          'esgupdate=esgcet.esgupdate:main',
+                                          'esgmapconv=esgcet.esgmapconv:main',
+                                          'esgmigrate=esgcet.esgmigrate:main',
                                           'esgunpublish=esgcet.esgunpublish:main']},
         data_files=[(FULLPATH, ['esg.ini'])]
 
