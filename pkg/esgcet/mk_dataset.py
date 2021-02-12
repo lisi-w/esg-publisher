@@ -46,6 +46,7 @@ def get_dataset(mapdata, scandata, data_node, index_node, replica):
                 if not silent:
                     eprint("WARNING: {} does not agree!".format(f))
         d[f] = parts[i]
+    print(d)
 
     # handle Global attributes if defined for the project
     if projkey in GA:
@@ -167,9 +168,9 @@ def get_scanfile_dict(scandata):
 
 def update_metadata(record, scanobj):
     if "variables" in scanobj:
-        if "variable_id" in record:
+        if "variable" in record:
 
-            vid = record["variable_id"]
+            vid = record["variable"]
             var_rec = scanobj["variables"][vid]
             if "long_name" in var_rec.keys():
                 record["variable_long_name"] = var_rec["long_name"]
