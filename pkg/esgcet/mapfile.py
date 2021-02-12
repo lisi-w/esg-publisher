@@ -1,7 +1,8 @@
 import sys, json
 from datetime import datetime
+import configparser as cfg
+from pathlib import Path
 
-ARGS = 1
 
 def normalize_path(path, project):
     pparts = path.split('/')
@@ -39,12 +40,12 @@ def parse_map_arr(map_data):
         for x in lst[3:]:
             parts = x.split('=')
             if parts[0] == 'mod_time':
-                rec[parts[0]] = datetime.utcfromtimestamp(float(parts[1])).isoformat()
+                rec["timestamp"] = datetime.utcfromtimestamp(float(parts[1])).isoformat()[0:19] + "Z"
+                assert(rec["timestamp"].find('.') == -1)
             else:
                 rec[parts[0]] = parts[1]
         ret.append(rec)
     return ret
-
 
 
 def map_entry(map_json, project, fs_root):
@@ -60,12 +61,13 @@ def map_entry(map_json, project, fs_root):
             outarr.append("{}={}".format(x,map_json[x]))
     return ' | '.join(outarr)
 
-def main(args):
 
-    if (len(args) < ARGS):
-        print("Missing required arguments!")
-        exit(0)
+def run(args):
 
     with open(args[0]) as map_data:
-        ret = parse_map(map_data)
+        if len(args) > 1:
+            ret = parse_map(map_data, args[1])
+        else:
+            ret = parse_map(map_data)
+
     return ret

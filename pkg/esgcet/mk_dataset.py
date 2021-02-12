@@ -1,13 +1,25 @@
 import sys, json
 from esgcet.mapfile import *
+import configparser as cfg
 
 from datetime import datetime, timedelta
 
 from esgcet.settings import *
+from pathlib import Path
 
-
-
+silent = False
+verbose = False
+data_roots = {}
+globus = "none"
+data_node = ""
+dtn = "none"
 EXCLUDES = [""]
+globus_printed = False
+dtn_printed = False
+
+def get_sv():
+    return
+
 
 def eprint(*a):
 
@@ -21,12 +33,7 @@ def unpack_values(invals):
             yield x['values']
 
 
-def get_dataset(mapdata, scandata):
-
-    if DATA_NODE == "":
-        raise BaseException("Missing data node!")
-    if INDEX_NODE == "":
-        raise BaseException("Missing index node!")
+def get_dataset(mapdata, scandata, data_node, index_node, replica):
 
     master_id, version = mapdata.split('#')
 
@@ -38,7 +45,8 @@ def get_dataset(mapdata, scandata):
         if f in scandata:
             ga_val = scandata[f]
             if not parts[i] == ga_val:
-                eprint("WARNING: {} does not agree!".format(f))
+                if not silent:
+                    eprint("WARNING: {} does not agree!".format(f))
         d[f] = parts[i]
 
     # handle Global attributes if defined for the project
@@ -54,18 +62,21 @@ def get_dataset(mapdata, scandata):
                 else:
                     d[facetkey] = facetval
         # would we ever combine mapped and delimited facets?
+    if projkey in GA_MAPPED:
         for gakey in GA_MAPPED[projkey]:
             if gakey in scandata:
                 facetkey = GA_MAPPED[projkey][gakey]
                 facetval = scandata[gakey]
                 d[facetkey] = facetval
             else:
-                eprint("WARNING: GA to be mapped {} is missing!".format(facetkey))
+                if not silent:
+                    eprint("WARNING: GA to be mapped {} is missing!".format(facetkey))
+    if projkey in CONST_ATTR: 
         for facetkey in CONST_ATTR[projkey]:
             d[facetkey] = CONST_ATTR[projkey][facetkey]
 
-    d['data_node'] = DATA_NODE
-    d['index_node'] = INDEX_NODE
+    d['data_node'] = data_node
+    d['index_node'] = index_node
     DRSlen = len(DRS[projkey])
     d['master_id'] = master_id
     d['instance_id'] = master_id + '.v' + version
@@ -73,7 +84,7 @@ def get_dataset(mapdata, scandata):
     if 'title' in d:
         d['short_description'] = d['title']
     d['title'] = d['master_id']
-    d['replica'] = True
+    d['replica'] = replica
     d['latest'] = 'true'
     d['type'] = 'Dataset'
     d['project'] = projkey
@@ -88,12 +99,26 @@ def get_dataset(mapdata, scandata):
 
 
 def format_template(template, root, rel):
+    global globus_printed
+    global dtn_printed
     if "Globus" in template:
-        return template.format(GLOBUS_UUID, root, rel)
+        if globus != 'none':
+            return template.format(globus, root, rel)
+        else:
+            if not silent and not globus_printed:
+                print("INFO: no Globus UUID defined. Using default: " + GLOBUS_UUID, file=sys.stderr)
+                globus_printed = True
+            return template.format(GLOBUS_UUID, root, rel)
     elif "gsiftp" in template:
-        return template.format(DATA_TRANSFER_NODE, root, rel)
+        if dtn != 'none':
+            return template.format(dtn, root, rel)
+        else:
+            if not silent and not dtn_printed:
+                print("INFO: no data transfer node defined. Using default: " + DATA_TRANSFER_NODE, file=sys.stderr)
+                dtn_printed = True
+            return template.format(DATA_TRANSFER_NODE, root, rel)
     else:
-        return template.format(DATA_NODE, root, rel)
+        return template.format(data_node, root, rel)
 
 
 def gen_urls(proj_root, rel_path):
@@ -120,11 +145,12 @@ def get_file(dataset_rec, mapdata, fn_trid):
 
     rel_path, proj_root = normalize_path(fullfn, dataset_rec["project"])
 
-    if not proj_root in DATA_ROOTS:
+
+    if not proj_root in data_roots:
         eprint('Error:  The file system root {} not found.  Please check your configuration.'.format(proj_root))
         exit(1)
 
-    ret["url"] = gen_urls(DATA_ROOTS[proj_root], rel_path)
+    ret["url"] = gen_urls(data_roots[proj_root], rel_path)
     if "number_of_files" in ret:
         ret.pop("number_of_files")
     else:
@@ -152,8 +178,11 @@ def update_metadata(record, scanobj):
             vid = record["variable_id"]
             var_rec = scanobj["variables"][vid]
             if "long_name" in var_rec.keys():
-            	record["variable_long_name"] = var_rec["long_name"]
-            record["cf_standard_name"] = var_rec["standard_name"]
+                record["variable_long_name"] = var_rec["long_name"]
+            elif "info" in var_rec:
+                record["variable_long_name"] = var_rec["info"]
+            if "standard_name" in var_rec:
+                record["cf_standard_name"] = var_rec["standard_name"]
             record["variable_units"] = var_rec["units"]
             record["variable"] = vid
         else:
@@ -198,7 +227,7 @@ def update_metadata(record, scanobj):
                     tu_start_inc = time_obj["values"][0]
                     tu_end_inc = time_obj["values"][-1]
                 else:
-                    eprint("WARNING: not sure where time values are...")
+                    eprint("WARNING: Time values not located...")
                     proc_time = False
                 if proc_time:
                     try:
@@ -241,12 +270,15 @@ def iterate_files(dataset_rec, mapdata, scandata):
 
     return ret, sz, access
 
-def get_records(mapdata, scanfilename, xattrfn=None):
+def get_records(mapdata, scanfilename, data_node, index_node, replica, xattrfn=None):
 
-    mapobj = mapdata
+    if isinstance(mapdata, str):
+        mapobj = json.load(open(mapdata))
+    else:
+        mapobj = mapdata
     scanobj = json.load(open(scanfilename))
 
-    rec = get_dataset(mapobj[0][0], scanobj['dataset'])
+    rec = get_dataset(mapobj[0][0], scanobj['dataset'], data_node, index_node, replica)
     update_metadata(rec, scanobj)
     rec["number_of_files"] = len(mapobj)  # place this better
 
@@ -255,23 +287,23 @@ def get_records(mapdata, scanfilename, xattrfn=None):
     else:
         xattrobj = {}
 
-    if DEBUG:
+    if verbose:
         print("rec = ")
-        print(rec)
+        print(json.dumps(rec, indent=4))
         print()
     for key in xattrobj:
         rec[key] = xattrobj[key]
 
     project = rec['project']
     mapdict = parse_map_arr(mapobj)
-    if DEBUG:
+    if verbose:
         print('mapdict = ')
-        print(mapdict)
+        print(json.dumps(mapdict, indent=4))
         print()
     scandict = get_scanfile_dict(scanobj['file'])
-    if DEBUG:
+    if verbose:
         print('scandict = ')
-        print(scandict)
+        print(json.dumps(scandict, indent=4))
         print()
     ret, sz, access = iterate_files(rec, mapdict, scandict)
     rec["size"] = sz
@@ -281,19 +313,22 @@ def get_records(mapdata, scanfilename, xattrfn=None):
 
 
 def run(args):
-    if (len(args) < 2):
-        print("Missing required arguments!")
-        exit(0)
 
-    if len(args) > 2:
-        ret = get_records(args[0], args[1], xattrfn=args[2])
+    global silent
+    global verbose
+    global data_roots
+    global dtn
+    global data_node
+    global globus
+    silent = args[8]
+    verbose = args[9]
+    data_roots = args[5]
+    globus = args[6]
+    dtn = args[7]
+    data_node = args[2]
+
+    if len(args) == 11:
+        ret = get_records(args[0], args[1], args[2], args[3], args[4], xattrfn=args[10])
     else:
-        ret = get_records(args[0], args[1])
+        ret = get_records(args[0], args[1], args[2], args[3], args[4])
     return ret
-
-def main():
-    run(sys.argv[1:])
-
-if __name__ == '__main__':
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-    main()

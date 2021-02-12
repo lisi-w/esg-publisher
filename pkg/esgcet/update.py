@@ -1,13 +1,13 @@
 from esgcet.pub_client import publisherClient
 import sys, json, requests
 from esgcet.settings import INDEX_NODE, CERT_FN
-import esgcet.args
+import configparser as cfg
 from datetime import datetime
-
-hostname = INDEX_NODE
-cert_fn = CERT_FN
+from pathlib import Path
 
 ARGS = 1
+silent = False
+verbose = False
 
 SEARCH_TEMPLATE = 'http://{}/esg-search/search/?latest=true&distrib=false&format=application%2Fsolr%2Bjson&data_node={}&master_id={}&fields=version,id'
 
@@ -33,34 +33,40 @@ def gen_hide_xml(id, *args):
 
     return txt
 
-def main(outdata):
+def run(args):
 
-    try:
-        input_rec = outdata
-    except Exception as e:
-        print("Error opening input json format {}".format(e))
-        exit(1)
+    global silent
+    global verbose
+
+    input_rec = args[0]
+    index_node = args[1]
+    cert_fn = args[2]
+    silent = args[3]
+    verbose = args[4]
+
     # The dataset record either first or last in the input file
     dset_idx = -1
     if not input_rec[dset_idx]['type'] == 'Dataset':
         dset_idx = 0
     
     if not input_rec[dset_idx]['type'] == 'Dataset':
-        print("Could not find the Dataset record.  Malformed input, exiting!")
+        print("Could not find the Dataset record.  Malformed input, exiting!", file=sys.stderr)
         exit(1)
 
     mst = input_rec[dset_idx]['master_id']
     dnode = input_rec[dset_idx]['data_node']
 
     # query for 
-    url = SEARCH_TEMPLATE.format(INDEX_NODE, dnode, mst)
+    url = SEARCH_TEMPLATE.format(index_node, dnode, mst)
 
-    print(url)
+    if verbose:
+        print(url)
     resp = requests.get(url)
 
-    print (resp.text)
+    if verbose:
+        print(resp.text)
     if not resp.status_code == 200:
-        print('Error')
+        print('Error', file=sys.stderr)
         exit(1)
     
     res = json.loads(resp.text)
@@ -69,11 +75,12 @@ def main(outdata):
         docs = res['response']["docs"]
         dsetid = docs[0]['id']
         update_rec = gen_hide_xml( dsetid )
-        pubCli = publisherClient(cert_fn, hostname)
+        pubCli = publisherClient(cert_fn, index_node)
         print (update_rec)
         pubCli.update(update_rec)
-        print('INFO: Found previous version, updating the record: {}'.format(dsetid))
+        if not silent:
+            print('INFO: Found previous version, updating the record: {}'.format(dsetid))
 
     else:
-        print('INFO: First dataset version for {}.'.format(mst))
-
+        if not silent:
+            print('INFO: First dataset version for {}.'.format(mst))

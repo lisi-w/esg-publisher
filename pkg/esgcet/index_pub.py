@@ -1,31 +1,25 @@
 from esgcet.pub_client import publisherClient
 
-import esgcet.list2json, sys, json
-from esgcet.settings import INDEX_NODE, CERT_FN
+import esgcet.list2json, sys, json, os
+import configparser as cfg
+from pathlib import Path
 
 
-def run(outdata):
+def run(args):
+
+    hostname = args[1]
+    cert_fn = args[2]
+    d = args[0]
+    silent = args[3]
+    verbose = args[4]
 
 
-
-    #	hostname = args[1]
-    #	cert_fn = args[3]
-    hostname = INDEX_NODE
-    cert_fn = CERT_FN
-    pubCli = publisherClient(cert_fn, hostname)
-
-    d = outdata
+    pubCli = publisherClient(cert_fn, hostname, verbose=verbose)
 
     for rec in d:
 
         new_xml = esgcet.list2json.gen_xml(rec)
-        print(new_xml)
+        if not silent:
+            print(new_xml)
         pubCli.publish(new_xml)
-#        print(new_xml)
 
-def main():
-    run(sys.argv[1:])
-
-if __name__ == '__main__':
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
-    main()
