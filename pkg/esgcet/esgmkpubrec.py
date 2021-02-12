@@ -142,14 +142,14 @@ def run():
         third_arg_mkd = True
 
 
-    try:
-        if third_arg_mkd:
-            out_json_data = mkd.run([map_json_data, scanfn, data_node, index_node, replica, data_roots, globus, dtn, silent, verbose, json_file])
-        else:
-            out_json_data = mkd.run([map_json_data, scanfn, data_node, index_node, replica, data_roots, globus, dtn, silent, verbose])
-    except Exception as ex:
+    #try:
+    if third_arg_mkd:
+        out_json_data = mkd.run([map_json_data, scanfn, data_node, index_node, replica, data_roots, globus, dtn, silent, verbose, json_file])
+    else:
+        out_json_data = mkd.run([map_json_data, scanfn, data_node, index_node, replica, data_roots, globus, dtn, silent, verbose])
+    """except Exception as ex:
         print("Error making dataset: " + str(ex), file=sys.stderr)
-        exit(1)
+        exit(1)"""
 
     if p:
         print(json.dumps(out_json_data))
