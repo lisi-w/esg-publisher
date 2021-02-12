@@ -227,14 +227,6 @@ def run(fullmap):
                 exit(1)
         else:
             cmor_tables = pub.cmor_path
-        try:
-            prepare_internal(map_json_data, cmor_tables)
-        except Exception as ex:
-            if verbose:
-                traceback.print_exc()
-            print("Error with PrePARE: " + str(ex), file=sys.stderr)
-            exit_cleanup(scan_file)
-            exit(1)
 
     # Run autocurator and all python scripts
     if not silent:
