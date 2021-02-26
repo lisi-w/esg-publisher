@@ -80,10 +80,18 @@ def run(fullmap):
             print("Error opening config file: " + str(ex))
             exit(1)
 
-    if pub.proj != "":
-        proj = pub.proj
     if pub.skip_prepare:
         skip_prep = True
+    else:
+        try:
+            sp = config['user']['skip_prepare']
+            if 'true' in sp or 'yes' in sp:
+                skip_prep = True
+        except:
+            pass
+
+    if pub.proj != "":
+        proj = pub.proj
     else:
         try:
             tmp = config['user']['project']

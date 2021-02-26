@@ -188,7 +188,7 @@ def main():
             maps.append(fullmap)
             log = TMP_DIR + f + ".log"
             logs.append(log)
-            pub_cmd = ["python3", "gen-five/src/python/pub-internal.py", "--map", fullmap]
+            pub_cmd = ["esgpublish", "--ini", "/export/witham3/pub-internal/replica_pub.ini", "--map", fullmap]
             jobs.append(pub_cmd)
             gotosleep = False
             check_flag()
