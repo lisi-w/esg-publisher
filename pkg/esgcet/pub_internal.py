@@ -56,6 +56,7 @@ def run(fullmap):
     files.append(fullmap)
 
     check_files(files)
+    skip_prep = False
 
     pub = args.get_args()
     third_arg_mkd = False
@@ -81,6 +82,8 @@ def run(fullmap):
 
     if pub.proj != "":
         proj = pub.proj
+    if pub.skip_prepare:
+        skip_prep = True
     else:
         try:
             tmp = config['user']['project']
@@ -224,9 +227,17 @@ def run(fullmap):
                 cmor_tables = config['user']['cmor_path']
             except:
                 print("No path for CMOR tables defined. Use --cmor-tables option or define in config file.", file=sys.stderr)
+                exit_cleanup(scan_file)
                 exit(1)
         else:
             cmor_tables = pub.cmor_path
+        if not skip_prep:
+            try:
+                prepare_internal(map_json_data, cmor_tables)
+            except Exception as ex:
+                print("Error with PrePARE: " + str(ex), file=sys.stderr)
+                exit_cleanup(scan_file)
+                exit(1)
 
     # Run autocurator and all python scripts
     if not silent:
@@ -241,6 +252,7 @@ def run(fullmap):
     stat = os.system(autstr.format(scanfn, destpath))
     if os.WEXITSTATUS(stat) != 0:
         print("Error running autocurator, exited with exit code: " + str(os.WEXITSTATUS(stat)), file=sys.stderr)
+        exit_cleanup(scan_file)
         exit(os.WEXITSTATUS(stat))
 
     if not silent:

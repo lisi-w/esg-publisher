@@ -20,6 +20,7 @@ def get_args():
     parser.add_argument("--certificate", "-c", dest="cert", default="./cert.pem", help="Use the following certificate file in .pem form for publishing (use a myproxy login to generate).")
     parser.add_argument("--project", dest="proj", default="", help="Set/overide the project for the given mapfile, for use with selecting the DRS or specific features, e.g. PrePARE, PID.")
     parser.add_argument("--cmor-tables", dest="cmor_path", default=None, help="Path to CMIP6 CMOR tables for PrePARE. Required for CMIP6 only.")
+    parser.add_argument("--skip-prepare", dest="skip_prepare", action="store_true", help="Skip the PrePARE step.")
     parser.add_argument("--autocurator", dest="autocurator_path", default=None, help="Path to autocurator repository folder.")
     parser.add_argument("--map", dest="map", required=True, nargs="+", help="Mapfile or list of mapfiles.")
     parser.add_argument("--ini", "-i", dest="cfg", default=def_config, help="Path to config file.")
