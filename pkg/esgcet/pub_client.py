@@ -25,6 +25,7 @@ class publisherClient(object):
 
         try:
             response = self.post_data(self.publishUrl, xmldata)
+            print(response.text)
         except requests.exceptions.SSLError as e:
             print("SSL error!", e )
         except Exception as e:
@@ -34,7 +35,7 @@ class publisherClient(object):
 
         try:
             response = self.post_data(self.updateUrl, xmldata)
-
+            print(response.text)
         except requests.exceptions.SSLError as e:
             print("SSL error!", e )
         except Exception as e:
@@ -45,6 +46,7 @@ class publisherClient(object):
 
         try:
             response = self.post_data(self.retractUrl, data)
+            print(response.text)
         except requests.exceptions.SSLError as e:
             print("SSL error!", e )
         except Exception as e:

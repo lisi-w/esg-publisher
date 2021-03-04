@@ -225,11 +225,12 @@ def update_metadata(record, scanobj):
                     eprint("WARNING: Time values not located...")
                     proc_time = False
                 if proc_time:
-                    try:
-                        days_since_dt = datetime.strptime(tu_date, "%Y-%m-%d")
-                    except:
+                    # TODO: handle this better
+                    #try:
+                    days_since_dt = datetime.strptime(tu_date.split("T")[0], "%Y-%m-%d")
+                    """except:
                         tu_date = '0' + tu_date
-                        days_since_dt = datetime.strptime(tu_date, "%Y-%m-%d")
+                        days_since_dt = datetime.strptime(tu_date.split("T")[0], "%Y-%m-%d")"""
                     dt_start = days_since_dt + timedelta(days=tu_start_inc)
                     dt_end = days_since_dt + timedelta(days=tu_end_inc)
                     if dt_start.microsecond >= 500000:
