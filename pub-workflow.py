@@ -87,6 +87,7 @@ def check_latest(pid):
     resp = json.loads(requests.get(get_meta, timeout=120).text)
     try:
         if resp["response"]["numFound"] == 0:
+            print(pid)
             print("No original record found.")
             return "missing"
         latest = resp["response"]["docs"][0]["latest"]
@@ -233,9 +234,9 @@ def main():
                                 autoc = True
                             if "Failed ac check" in line or "Failed ec check" in line:
                                 print("WARNING: Failed activity check or experiment id check")
-                    fn = log[24:-8]
-                    m = fn + ".map"
-                    l = fn + ".log"
+                    fn = log.split("/")[-1]
+                    m = fn[:-4]
+                    l = fn
                     if success < 2:
                         if redo_errs:
                             continue
@@ -311,9 +312,10 @@ def main():
 if __name__ == '__main__':
     go = True
     while go:
-        try:
-            main()
-        except Exception as ex:
+        #try:
+        main()
+        go = False
+        """except Exception as ex:
             if "stale file handle" in str(ex):
                 print("Filesystem error likely. Going to sleep")
                 check_flag()
@@ -324,4 +326,4 @@ if __name__ == '__main__':
                 check_flag()
                 continue
             send_msg(str(ex), "e.witham@columbia.edu")
-            go = False
+            go = False"""
