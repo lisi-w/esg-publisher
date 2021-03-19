@@ -9,5 +9,5 @@ if [ $running -gt 1 ]
 then
   exit 0
 else
-  python3 pub-workflow.py
+  thedate=`date +%y%m%d_%H%M` ; time nohup python3 pub-workflow.py > /esg/log/publisher/main/replica-pub.$thedate.log
 fi
