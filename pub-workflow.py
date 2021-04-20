@@ -144,7 +144,7 @@ def main():
             print("Filesystem error likely. Will attempt to resume in 5 minutes.")
             time.sleep(300)
             continue
-        if count == 0:
+        if count == 0 and not redo_errs:
             print("No maps left to do.")
             if not errs_done:
                 print("Re checking errors...")
