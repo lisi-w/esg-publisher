@@ -84,8 +84,8 @@ def check_errata(pid):
 
 def check_latest(pid):
     get_meta = "https://esgf-node.llnl.gov/esg-search/search?format=application%2fsolr%2bjson&instance_id={}&fields=retracted,latest".format(pid)
-    resp = json.loads(requests.get(get_meta, timeout=120).text)
     try:
+        resp = json.loads(requests.get(get_meta, timeout=120).text)
         if resp["response"]["numFound"] == 0:
             print(pid)
             print("No original record found.")
@@ -245,6 +245,9 @@ def main():
                         print("error " + fullmap)
                         errata = check_errata(fn)
                         latest_rc = check_latest(fn)
+                        if latest_rc == "error":
+                            time.sleep(120)
+                            latest_rc = check_latest(fn)
                         if errata:
                             shutil.move(fullmap, FAIL_DIR + "errata/" + m)
                             shutil.move(log, ERROR_LOGS + "errata/" + l)
