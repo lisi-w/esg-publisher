@@ -196,7 +196,7 @@ def main():
             if len(jobs) >= 8:
                 i = 0
                 for cmd in jobs:
-                    p_list.append(subprocess.Popen(cmd, stdout=open(logs[i], "w+"), stderr=open(logs[i], "w+")))
+                    p_list.append(subprocess.Popen(cmd, stdout=open(logs[i], "a+"), stderr=open(logs[i], "a+")))
                     i += 1
                 for p in p_list:
                     try:
