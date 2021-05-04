@@ -237,7 +237,7 @@ def main():
                             if "Failed ac check" in line or "Failed ec check" in line:
                                 print("WARNING: Failed activity check or experiment id check")
                         now = datetime.now()
-                        date = now.strftime("%d/%m/%Y %H:%M:%S")
+                        date = now.strftime("%m/%d/%Y %H:%M:%S")
                         l.write(date)
                     fn = log.split("/")[-1]
                     m = fn[:-4]
