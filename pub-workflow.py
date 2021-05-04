@@ -1,4 +1,5 @@
 import time
+from datetime import datetime
 import subprocess
 import os
 from subprocess import PIPE
@@ -215,9 +216,10 @@ def main():
                     fullmap = maps[n]
                     if timeout[n]:
                         n += 1
+                        print("TIMEOUT" + fullmap, file=sys.stderr)
                         continue
                     n += 1
-                    with open(log, "r") as l:
+                    with open(log, "r+") as l:
                         l.seek(0,0)
                         for line in l.readlines():
                             if "success" in line:
@@ -234,6 +236,9 @@ def main():
                                 autoc = True
                             if "Failed ac check" in line or "Failed ec check" in line:
                                 print("WARNING: Failed activity check or experiment id check")
+                        now = datetime.now()
+                        date = now.strftime("%d/%m/%Y %H:%M:%S")
+                        l.write(date)
                     fn = log.split("/")[-1]
                     m = fn[:-4]
                     l = fn
