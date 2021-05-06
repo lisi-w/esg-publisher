@@ -10,6 +10,7 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 import requests
 import json
+import sys
 
 
 FLAG_FILE = "/export/witham3/pub-internal/flag.txt"
@@ -21,6 +22,7 @@ MAP_PREFIX = "/p/user_pub/publish-queue/CMIP6-maps-todo/"
 ERR_PREFIX = "/p/user_pub/publish-queue/CMIP6-maps-err/"
 
 CMOR_PATH = "/export/witham3/cmor"
+DEBUG = False
 
 
 def run_ac(input_rec):
@@ -135,23 +137,25 @@ def main():
     count = 0
     redo_errs = False
     errs_done = False
-    print("USER WARNING: This job will continue to run until stopped. Use text file flag to quit job.")
+    print("USER WARNING: This job will continue to run until stopped. Use text file flag to quit job.", file=sys.stderr, flush=True)
     while run:
+        if DEBUG:
+            print("outside loop", file=sys.stderr, flush=True)
         check_flag()
         try:
             files = os.listdir("/p/user_pub/publish-queue/CMIP6-maps-todo")
             count = len(files)
         except:
-            print("Filesystem error likely. Will attempt to resume in 5 minutes.")
+            print("Filesystem error likely. Will attempt to resume in 5 minutes.", file=sys.stderr, flush=True)
             time.sleep(300)
             continue
         if count == 0 and not redo_errs:
-            print("No maps left to do.")
+            print("No maps left to do.", file=sys.stderr, flush=True)
             if not errs_done:
-                print("Re checking errors...")
+                print("Re checking errors...", file=sys.stderr, flush=True)
                 redo_errs = True
                 continue
-            print("Going to sleep.")
+            print("Going to sleep.", file=sys.stderr, flush=True)
             time.sleep(1000)
             continue
         check_flag()
@@ -159,8 +163,13 @@ def main():
             try:
                 files = os.listdir("/p/user_pub/publish-queue/CMIP6-maps-err")
                 count = len(files)
+                if count == 5:
+                    print("No unsorted errors left to retry.", file=sys.stderr, flush=True)
+                    errs_done = True
+                    redo_errs = False
+                    continue
             except:
-                print("Filesystem error likely. Will attempt to resume in 5 minutes.")
+                print("Filesystem error likely. Will attempt to resume in 5 minutes.", file=sys.stderr, flush=True)
                 time.sleep(300)
                 continue
         jobs = []
@@ -169,11 +178,14 @@ def main():
         maps = []
         timeout = []
         for f in files:
+            if DEBUG:
+                print("file loop", file=sys.stderr, flush=True)
             check_flag()
             if redo_errs:
                 fullmap = ERR_PREFIX + f
             else:
                 fullmap = MAP_PREFIX + f
+            map_found = False
             if fullmap[-4:] != ".map":
                 if ".part" in fullmap:
                     try:
@@ -187,6 +199,9 @@ def main():
                     continue
                 else:
                     continue
+            else:
+                map_found = True
+
             maps.append(fullmap)
             log = TMP_DIR + f + ".log"
             logs.append(log)
@@ -194,20 +209,28 @@ def main():
             jobs.append(pub_cmd)
             gotosleep = False
             check_flag()
-            if len(jobs) >= 8:
+            if len(jobs) >= 8 or len(jobs) == count:
                 i = 0
                 for cmd in jobs:
                     p_list.append(subprocess.Popen(cmd, stdout=open(logs[i], "a+"), stderr=open(logs[i], "a+")))
                     i += 1
                 for p in p_list:
+                    if DEBUG:
+                        print("job loop", file=sys.stderr, flush=True)
                     try:
                         p.wait(timeout=600)
                         timeout.append(False)
                     except:
-                        print("job timeout" + str(p.args))
+                        now = datetime.now()
+                        date = now.strftime("%m/%d/%Y %H:%M:%S")
+                        print(date + " job timeout: " + str(p.args), file=sys.stderr, flush=True)
                         timeout.append(True)
                 n = 0
                 for log in logs:
+                    if DEBUG:
+                        print("log loop", file=sys.stderr, flush=True)
+                    now = datetime.now()
+                    date = now.strftime("%m/%d/%Y %H:%M:%S")
                     success = 0
                     autoc = False
                     pid = False
@@ -216,7 +239,6 @@ def main():
                     fullmap = maps[n]
                     if timeout[n]:
                         n += 1
-                        print("TIMEOUT" + fullmap, file=sys.stderr)
                         continue
                     n += 1
                     with open(log, "r+") as l:
@@ -235,9 +257,7 @@ def main():
                             if "Unable to open data" in line:
                                 autoc = True
                             if "Failed ac check" in line or "Failed ec check" in line:
-                                print("WARNING: Failed activity check or experiment id check")
-                        now = datetime.now()
-                        date = now.strftime("%m/%d/%Y %H:%M:%S")
+                                print("WARNING: Failed activity check or experiment id check", file=sys.stderr, flush=True)
                         l.write(date)
                     fn = log.split("/")[-1]
                     m = fn[:-4]
@@ -247,7 +267,7 @@ def main():
                             continue
                         if ".part" in log:
                             continue
-                        print("error " + fullmap)
+                        print(date + " error " + fullmap, file=sys.stderr, flush=True)
                         errata = check_errata(fn)
                         latest_rc = check_latest(fn)
                         if latest_rc == "error":
@@ -263,19 +283,19 @@ def main():
                             shutil.move(fullmap, FAIL_DIR + "missing/" + m)
                             shutil.move(log, ERROR_LOGS + "missing/" + l)
                         elif pid:
-                            print("pid error")
+                            print("pid error", file=sys.stderr, flush=True)
                         elif filesystem:
-                            print("filesystem error")
+                            print("filesystem error", file=sys.stderr, flush=True)
                             gotosleep = True
                         elif server:
-                            print("server error")
+                            print("server error", file=sys.stderr, flush=True)
                         elif autoc:
-                            print("autocurator error")
+                            print("autocurator error", file=sys.stderr, flush=True)
                             try:
                                 shutil.move(fullmap, FAIL_DIR + "autocurator/" + m)
                                 shutil.move(log, ERROR_LOGS + "autocurator/" + l)
                             except Exception as ex:
-                                print("shutil error")
+                                print("shutil error", file=sys.stderr, flush=True)
                                 if 'already exists' in str(ex) or 'Destination path' in str(ex):
                                     os.remove(fullmap)
                                     os.remove(log)
@@ -294,6 +314,7 @@ def main():
                                     send_msg(str(ex), 'e.witham@columbia.edu')
                                     exit(1)
                     else:
+                        print(date + " success: " + m, file=sys.stderr, flush=True)
                         try:
                             shutil.move(fullmap, SUCCESS_DIR + m)
                             os.remove(log)
@@ -312,7 +333,7 @@ def main():
                     redo_errs = False
                     errs_done = True
                 if gotosleep:
-                    print("Going to sleep to resolve filesystem/server error. Will resume in 10 minutes.")
+                    print("Going to sleep to resolve filesystem/server error. Will resume in 10 minutes.", file=sys.stderr, flush=True)
                     time.sleep(600)
         check_flag()
 
@@ -320,18 +341,19 @@ def main():
 if __name__ == '__main__':
     go = True
     while go:
-        #try:
-        main()
-        go = False
-        """except Exception as ex:
+        if DEBUG:
+            print("main loop", file=sys.stderr, flush=True)
+        try:
+            main()
+        except Exception as ex:
             if "stale file handle" in str(ex):
-                print("Filesystem error likely. Going to sleep")
+                print("Filesystem error likely. Going to sleep", file=sys.stderr, flush=True)
                 check_flag()
                 time.sleep(600)
                 continue
             elif "No such file or directory" in str(ex):
-                print("error, attempting to list directory...")
+                print("error, attempting to list directory...", file=sys.stderr, flush=True)
                 check_flag()
                 continue
             send_msg(str(ex), "e.witham@columbia.edu")
-            go = False"""
+            go = False
