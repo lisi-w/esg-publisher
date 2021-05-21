@@ -75,11 +75,15 @@ def check_errata(pid):
         return False
     if errata:
         uid = str(resp[next(iter(resp))]["errataIds"][0])
-        get_desc = "errata.es-doc.org/1/issue/retrieve?uid={}".format(uid)
-        resp2 = json.loads(requests.get(get_desc, timeout=120, verify=False).text)
-        desc = resp2["issue"]["description"]
-        print("Errata found: " + desc)
-        return True
+        get_desc = "http://errata.es-doc.org/1/issue/retrieve?uid={}".format(uid)
+        try:
+            resp2 = json.loads(requests.get(get_desc, timeout=120, verify=False).text)
+            desc = resp2["issue"]["description"]
+            print("Errata found: " + desc)
+            return True
+        except:
+            print("Could not get description from Errata site.")
+            return True
     else:
         print("No existing errata for this dataset.")
         return False
