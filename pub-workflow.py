@@ -11,6 +11,7 @@ from email.mime.base import MIMEBase
 import requests
 import json
 import sys
+import tarfile
 
 
 FLAG_FILE = "/export/witham3/pub-internal/flag.txt"
@@ -20,6 +21,7 @@ TMP_DIR = "/export/witham3/tmplogs/"
 ERROR_LOGS = "/esg/log/publisher/"
 MAP_PREFIX = "/p/user_pub/publish-queue/CMIP6-maps-todo/"
 ERR_PREFIX = "/p/user_pub/publish-queue/CMIP6-maps-err/"
+TAR_DIR = "/p/user_pub/publish-queue/CMIP6-map-tarballs/"
 
 CMOR_PATH = "/export/witham3/cmor"
 DEBUG = False
@@ -136,6 +138,22 @@ def check_flag():
         exit(0)
 
 
+def archive_maps(files):
+    print("Archiving maps...", file=sys.stderr, flush=True)
+    date = datetime.now()
+    fn = "mapfiles-" + str(thedate.strftime("%Y%m%d"))
+    # tar command
+    tar_job = subprocess.Popen(["tar", "-czf", TAR_DIR + fn, SUCCESS_DIR])
+    try:
+        tar_job.wait(timeout=3600)
+    except Exception as ex:
+        print("ERROR: could not archive mapfiles: " + str(ex), file=sys.stderr, flush=True)
+        return
+    # remove maps
+    for mf in files:
+        os.remove(SUCCESS_DIR + mf)
+
+
 def main():
     run = True
     count = 0
@@ -149,10 +167,14 @@ def main():
         try:
             files = os.listdir("/p/user_pub/publish-queue/CMIP6-maps-todo")
             count = len(files)
+            done_files = os.listdir(SUCCESS_DIR)
+            done_count = len(done_files)
         except:
             print("Filesystem error likely. Will attempt to resume in 5 minutes.", file=sys.stderr, flush=True)
             time.sleep(300)
             continue
+        if done_count >= 100000:
+            archive_maps(done_files)
         if count == 0 and not redo_errs:
             print("No maps left to do.", file=sys.stderr, flush=True)
             if not errs_done:
