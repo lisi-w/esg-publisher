@@ -140,7 +140,7 @@ def check_flag():
 
 def archive_maps(files):
     print("Archiving maps...", file=sys.stderr, flush=True)
-    date = datetime.now()
+    thedate = datetime.now()
     fn = "mapfiles-" + str(thedate.strftime("%Y%m%d"))
     # tar command
     tar_job = subprocess.Popen(["tar", "-czf", TAR_DIR + fn, SUCCESS_DIR])
