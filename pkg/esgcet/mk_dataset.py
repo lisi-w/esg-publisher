@@ -1,334 +1,410 @@
 import sys, json
-from esgcet.mapfile import *
+from esgcet.mapfile import ESGPubMapConv
 import configparser as cfg
 
 from datetime import datetime, timedelta
 
 from esgcet.settings import *
 from pathlib import Path
+import esgcet.logger as logger
 
-silent = False
-verbose = False
-data_roots = {}
-globus = "none"
-data_node = ""
-dtn = "none"
-EXCLUDES = [""]
-globus_printed = False
-dtn_printed = False
-
-def get_sv():
-    return
+log = logger.Logger()
 
 
-def eprint(*a):
+class ESGPubMakeDataset:
 
-    print(*a, file=sys.stderr)
+    def init_project(self, proj):
+        project = proj
+        if not self.user_project:
+            project = proj.lower()
 
+        if project in DRS:
+            self.DRS = DRS[project]
+            if project in CONST_ATTR:
+                self.CONST_ATTR = CONST_ATTR[project]
+        elif self.user_project and project in self.user_project:
+            self.DRS = self.user_project[project]['DRS']
+            if 'CONST_ATTR' in self.user_project[project]:
+                self.CONST_ATTR = self.user_project[project]['CONST_ATTR']
+        else:
+            raise (BaseException("Error: Project {project} Data Record Syntax (DRS) not defined. Define in esg.ini"))
 
-def unpack_values(invals):
+    def __init__(self, data_node, index_node, replica, globus, data_roots, dtn, silent=False, verbose=False, limit_exceeded=False, user_project=None):
+        self.silent = silent
+        self.verbose = verbose
+        self.data_roots = data_roots
+        self.globus = globus
+        self.data_node = data_node
+        self.index_node = index_node
+        self.replica = replica
+        self.dtn = dtn
+        self.limit_exceeded = limit_exceeded
 
-    for x in invals:
-        if x['values']:
-            yield x['values']
+        self.mapconv = ESGPubMapConv("")
+        self.dataset = {}
+        self.project = None
+        self.user_project = user_project
+        self.DRS = None
+        self.CONST_ATTR = None
+        self.variable_name = "variable_id"
+        self.publog = log.return_logger('Make Dataset', self.silent, self.verbose)
 
+    def set_project(self, project_in):
+        self.project = project_in
 
-def get_dataset(mapdata, scandata, data_node, index_node, replica):
+    def unpack_values(self, invals):
+        for x in invals:
+            if x['values']:
+                yield x['values']
 
-    master_id, version = mapdata.split('#')
+    def prune_list(self, ll):
+        for x in ll:
+            if not x is None:
+                yield (x)
 
-    parts = master_id.split('.')
-    projkey = parts[0]
-    facets = DRS[projkey]
-    d = {}
-    for i, f in enumerate(facets):
-        if f in scandata:
-            ga_val = scandata[f]
-            if not parts[i] == ga_val:
-                if not silent:
-                    eprint("WARNING: {} does not agree!".format(f))
-        d[f] = parts[i]
+    def load_xattr(self, xattrfn):
+        if (xattrfn):
+            self.xattr = json.load(open(xattrfn))
+        else:
+            self.xattr = {}
 
-    # handle Global attributes if defined for the project
-    if projkey in GA:
-        for facetkey in GA[projkey]:
-            # did we find a GA in the data by the the key name
-            if facetkey in scandata:
-                facetval = scandata[facetkey]
-                # is this a delimited attribute ?
-                if facetkey in GA_DELIMITED[projkey]:
-                    delimiter = GA_DELIMITED[projkey][facetkey]
-                    d[facetkey] = facetval.split(delimiter)
+    def proc_xattr(self, xattrfn):
+        self.load_xattr(xattrfn)
+        if len(self.xattr) > 0:
+            tmp_xattr = self.xattr_handler()
+            for key in tmp_xattr:
+                self.dataset[key] = tmp_xattr[key]
+
+    def xattr_handler(self):
+        return self.xattr
+
+    def get_dataset(self, mapdata, scanobj):
+
+        master_id, version = mapdata.split('#')
+
+        parts = master_id.split('.')
+
+        projkey = parts[0]
+        scandata = scanobj['dataset']
+
+        if self.project:
+            projkey = self.project
+        self.init_project(projkey)
+
+        facets = self.DRS  # depends on Init_project to initialize
+
+        assert(facets)
+        if projkey == "cordex":
+            self.variable_name = "variable"
+
+        for i, f in enumerate(facets):
+            if f in scandata:
+                ga_val = scandata[f]
+                if not parts[i] == ga_val:
+                    self.publog.warning("{} does not agree!".format(f))
+            self.dataset[f] = parts[i]
+
+        self.global_attributes(projkey, scandata)
+        self.global_attr_mapped(projkey, scandata)
+        self.const_attr()
+        self.assign_dset_values(projkey, master_id, version)
+
+    def global_attributes(self, proj, scandata):
+        # handle Global attributes if defined for the project
+        projkey = proj.lower()
+        if projkey in GA:
+            for facetkey in GA[projkey]:
+                # did we find a GA in the data by the the key name
+                if facetkey in scandata:
+                    facetval = scandata[facetkey]
+                    # is this a delimited attribute ?
+                    if facetkey in GA_DELIMITED[projkey]:
+                        delimiter = GA_DELIMITED[projkey][facetkey]
+                        self.dataset[facetkey] = facetval.split(delimiter)
+                    else:
+                        self.dataset[facetkey] = facetval
+
+    def global_attr_mapped(self, proj, scandata):
+        projkey = proj.lower()
+        if projkey in GA_MAPPED:
+            for gakey in GA_MAPPED[projkey]:
+                if gakey in scandata:
+                    facetkey = GA_MAPPED[projkey][gakey]
+                    facetval = scandata[gakey]
+                    self.dataset[facetkey] = facetval
                 else:
-                    d[facetkey] = facetval
-        # would we ever combine mapped and delimited facets?
-    if projkey in GA_MAPPED:
-        for gakey in GA_MAPPED[projkey]:
-            if gakey in scandata:
-                facetkey = GA_MAPPED[projkey][gakey]
-                facetval = scandata[gakey]
-                d[facetkey] = facetval
+                    self.publog.warning("GA to be mapped {} is missing!".format(facetkey))
+
+    def const_attr(self):
+        if self.CONST_ATTR:
+            for facetkey in self.CONST_ATTR:
+                self.dataset[facetkey] = self.CONST_ATTR[facetkey]
+
+    def assign_dset_values(self, projkey, master_id, version):
+
+        self.dataset['data_node'] = self.data_node
+        self.dataset['index_node'] = self.index_node
+        self.dataset['master_id'] = master_id
+        self.dataset['instance_id'] = master_id + '.v' + version
+        self.dataset['id'] = self.dataset['instance_id'] + '|' + self.dataset['data_node']
+        if 'title' in self.dataset:
+            self.dataset['short_description'] = self.dataset['title']
+        self.dataset['title'] = self.dataset['master_id']
+        self.dataset['replica'] = self.replica
+        self.dataset['latest'] = 'true'
+        self.dataset['type'] = 'Dataset'
+        self.dataset['project'] = projkey
+        self.dataset['version'] = version
+
+        fmat_list = ['%({})s'.format(x) for x in self.DRS]
+
+        self.dataset['dataset_id_template_'] = '.'.join(fmat_list)
+        self.dataset['directory_format_template_'] = '%(root)s/{}/%(version)s'.format('/'.join(fmat_list))
+
+    def format_template(self, template, root, rel):
+        if "Globus" in template:
+            if self.globus != 'none':
+                return template.format(self.globus, root, rel)
             else:
-                if not silent:
-                    eprint("WARNING: GA to be mapped {} is missing!".format(facetkey))
-    if projkey in CONST_ATTR: 
-        for facetkey in CONST_ATTR[projkey]:
-            d[facetkey] = CONST_ATTR[projkey][facetkey]
-
-    d['data_node'] = data_node
-    d['index_node'] = index_node
-    DRSlen = len(DRS[projkey])
-    d['master_id'] = master_id
-    d['instance_id'] = master_id + '.v' + version
-    d['id'] = d['instance_id'] + '|' + d['data_node']
-    if 'title' in d:
-        d['short_description'] = d['title']
-    d['title'] = d['master_id']
-    d['replica'] = replica
-    d['latest'] = 'true'
-    d['type'] = 'Dataset'
-    d['project'] = projkey
-    d['version'] = version
-
-    fmat_list = ['%({})s'.format(x) for x in DRS[projkey]]
-
-    d['dataset_id_template_'] = '.'.join(fmat_list)
-    d['directory_format_template_'] = '%(root)s/{}/%(version)s'.format('/'.join(fmat_list))
-
-    return d
-
-
-def format_template(template, root, rel):
-    global globus_printed
-    global dtn_printed
-    if "Globus" in template:
-        if globus != 'none':
-            return template.format(globus, root, rel)
-        else:
-            if not silent and not globus_printed:
-                print("INFO: no Globus UUID defined. Using default: " + GLOBUS_UUID, file=sys.stderr)
-                globus_printed = True
-            return template.format(GLOBUS_UUID, root, rel)
-    elif "gsiftp" in template:
-        if dtn != 'none':
-            return template.format(dtn, root, rel)
-        else:
-            if not silent and not dtn_printed:
-                print("INFO: no data transfer node defined. Using default: " + DATA_TRANSFER_NODE, file=sys.stderr)
-                dtn_printed = True
-            return template.format(DATA_TRANSFER_NODE, root, rel)
-    else:
-        return template.format(data_node, root, rel)
-
-
-def gen_urls(proj_root, rel_path):
-    return  [format_template(template, proj_root, rel_path) for template in URL_Templates]
-
-
-def get_file(dataset_rec, mapdata, fn_trid):
-    ret = dataset_rec.copy()
-    dataset_id = dataset_rec["id"]
-    ret['type'] = "File"
-    fullfn = mapdata['file']
-
-    fparts = fullfn.split('/')
-    title = fparts[-1]
-    ret['id'] = "{}.{}".format(ret['instance_id'], title)
-    ret['title'] = title
-    ret["dataset_id"] = dataset_id
-    if "tracking_id" in fn_trid:
-        ret["tracking_id"] = fn_trid["tracking_id"]
-
-    for kn in mapdata:
-        if kn not in ("id", "file"):
-            ret[kn] = mapdata[kn]
-
-    rel_path, proj_root = normalize_path(fullfn, dataset_rec["project"])
-
-
-    if not proj_root in data_roots:
-        eprint('Error:  The file system root {} not found.  Please check your configuration.'.format(proj_root))
-        exit(1)
-
-    ret["url"] = gen_urls(data_roots[proj_root], rel_path)
-    if "number_of_files" in ret:
-        ret.pop("number_of_files")
-    else:
-        eprint("WARNING: no files present")
-    if "datetime_start" in ret:
-        ret.pop("datetime_start")
-        ret.pop("datetime_end")
-
-    return ret
-    # need to match up the
-
-
-def get_scanfile_dict(scandata):
-    ret = {}
-    for key in scandata:
-        rec = scandata[key]
-        ret[rec['name']] = rec
-    return ret
-
-
-def update_metadata(record, scanobj):
-    if "variables" in scanobj:
-        if "variable_id" in record:
-
-            vid = record["variable_id"]
-            var_rec = scanobj["variables"][vid]
-            if "long_name" in var_rec.keys():
-                record["variable_long_name"] = var_rec["long_name"]
-            elif "info" in var_rec:
-                record["variable_long_name"] = var_rec["info"]
-            if "standard_name" in var_rec:
-                record["cf_standard_name"] = var_rec["standard_name"]
-            record["variable_units"] = var_rec["units"]
-            record["variable"] = vid
-        else:
-            eprint("TODO check project settings for variable extraction")
-            record["variable"] = "Multiple"
-    else:
-        eprint("WARNING: no variables were extracted (is this CF compliant?)")
-
-    geo_units = []
-    if "axes" in scanobj:
-        axes = scanobj["axes"]
-        if "lat" in axes:
-            lat = axes["lat"]
-            geo_units.append(lat["units"])
-            if 'values' not in lat.keys():
-                record["north_degrees"] = lat['subaxes']['0']["values"][-1]
-                record["south_degrees"] = lat['subaxes']['0']["values"][0]
+                return None
+        elif "gsiftp" in template:
+            if self.dtn != 'none':
+                return template.format(self.dtn, root, rel)
             else:
-                record["north_degrees"] = lat["values"][-1]
-                record["south_degrees"] = lat["values"][0]
-        if "lon" in axes:
-            lon = axes["lon"]
-            geo_units.append(lon["units"])
-            record["east_degrees"] = lon["values"][-1]
-            record["west_degrees"] = lon["values"][0]
-        if "time" in axes:
-            time_obj = axes["time"]
-            time_units = time_obj["units"]
-            tu_parts = []
-            if type(time_units) is str:
-                tu_parts = time_units.split()
-            if len(tu_parts) > 2 and tu_parts[0] == "days" and tu_parts[1] == "since":
-                proc_time = True
-                tu_date = tu_parts[2]  # can we ignore time component?
-                if "subaxes" in time_obj:
-                    subaxes = time_obj["subaxes"]
-                    sub_values = sorted([x for x in unpack_values(subaxes.values())])
+                return None
+        else:
+            return template.format(self.data_node, root, rel)
 
-                    tu_start_inc = int(sub_values[0][0])
-                    tu_end_inc = int(sub_values[-1][-1])
-                elif "values" in time_obj:
-                    tu_start_inc = time_obj["values"][0]
-                    tu_end_inc = time_obj["values"][-1]
+    def gen_urls(self, proj_root, rel_path):
+        res = self.prune_list([self.format_template(template, proj_root, rel_path) for template in URL_Templates])
+        return list(res)
+
+    def get_file(self, mapdata, fn_trid):
+        ret = self.dataset.copy()
+        dataset_id = self.dataset["id"]
+        ret['type'] = "File"
+        fullfn = mapdata['file']
+
+        fparts = fullfn.split('/')
+        title = fparts[-1]
+        ret['id'] = "{}.{}".format(ret['instance_id'], title)
+        ret['title'] = title
+        ret["dataset_id"] = dataset_id
+        if "tracking_id" in fn_trid:
+            ret["tracking_id"] = fn_trid["tracking_id"]
+
+        for kn in mapdata:
+            if kn not in ("id", "file"):
+                ret[kn] = mapdata[kn]
+
+        rel_path, proj_root = self.mapconv.normalize_path(fullfn, self.dataset["project"])
+
+        if not proj_root in self.data_roots:
+            self.publog.error('The file system root {} not found.  Please check your configuration.'.format(proj_root))
+            exit(1)
+
+        ret["url"] = self.gen_urls(self.data_roots[proj_root], rel_path)
+        if "number_of_files" in ret:
+            ret.pop("number_of_files")
+        else:
+            self.publog.warning("No files present")
+        if "datetime_start" in ret:
+            ret.pop("datetime_start")
+            ret.pop("datetime_end")
+
+        return ret
+
+    def get_scanfile_dict(self, scandata):
+        ret = {}
+        for key in scandata:
+            rec = scandata[key]
+            ret[rec['name']] = rec
+        return ret
+
+    def update_metadata(self, record, scanobj):
+        if "variables" in scanobj:
+            if self.variable_name in record:
+
+                vid = record[self.variable_name]
+                try:
+                    if vid in scanobj["variables"]:
+                        var_rec = scanobj["variables"][vid]
+                        if "long_name" in var_rec.keys():
+                            record["variable_long_name"] = var_rec["long_name"]
+                        elif "info" in var_rec:
+                            record["variable_long_name"] = var_rec["info"]
+                        if "standard_name" in var_rec:
+                            record["cf_standard_name"] = var_rec["standard_name"]
+                        record["variable_units"] = var_rec["units"]
+                        record[self.variable_name] = vid
+                        if self.variable_name == "variable_id":
+                            record["variable"] = vid
+                    else:
+                        var_list = list(scanobj["variables"].keys())
+                        if len(var_list) < VARIABLE_LIMIT:
+                            init_lst = [self.variable_name, "variable_long_name"]
+                            if "variable_id" in init_lst:
+                                init_lst.append("variable")
+                            for kid in init_lst:
+                                record[kid] = []
+                            units_list = []
+                            cf_list = []
+                            for vk in var_list:
+                                if not vk in VARIABLE_EXCLUDES:
+                                    var_rec = scanobj["variables"][vk]
+                                    if "long_name" in var_rec.keys():
+                                        record["variable_long_name"].append(var_rec["long_name"])
+                                    elif "info" in var_rec:
+                                        record["variable_long_name"].append(var_rec["info"])
+                                    if "standard_name" in var_rec and len(var_rec["standard_name"]) > 0:
+                                        cf_list.append(var_rec["standard_name"])          
+                                    if var_rec["units"] != "1" and len(var_rec["units"]) > 0:
+                                        units_list.append(var_rec["units"])
+                                    record["variable"].append(vk)
+
+                            if self.variable_name == "variable_id":
+                                record[self.variable_name] = "Multiple"
+                            record["variable_units"] = list(set(units_list))
+                            record["cf_standard_name"] = list(set(cf_list))
+                    
+                        if self.variable_name == "variable_id":
+                            record["variable"] = "Multiple"
+
+                except Exception as ex:
+                    self.publog.exception("Variable could not be extracted, exception encountered")
+                    record[self.variable_name] = "none"
+            else:
+                self.publog.warning("TODO check project settings for variable extraction")
+                record[self.variable_name] = "Multiple"
+                if self.variable_name == "variable_id":
+                    record["variable"] = "Multiple"
+        else:
+            self.publog.warning("No variables were extracted (is this CF compliant?)")
+
+        geo_units = []
+        if "axes" in scanobj:
+            axes = scanobj["axes"]
+            if "lat" in axes:
+                lat = axes["lat"]
+                geo_units.append(lat["units"])
+                if 'values' not in lat.keys():
+                    record["north_degrees"] = lat['subaxes']['0']["values"][-1]
+                    record["south_degrees"] = lat['subaxes']['0']["values"][0]
                 else:
-                    eprint("WARNING: Time values not located...")
-                    proc_time = False
-                if proc_time:
-                    try:
-                        days_since_dt = datetime.strptime(tu_date, "%Y-%m-%d")
-                    except:
-                        tu_date = '0' + tu_date
-                        days_since_dt = datetime.strptime(tu_date, "%Y-%m-%d")
-                    dt_start = days_since_dt + timedelta(days=tu_start_inc)
-                    dt_end = days_since_dt + timedelta(days=tu_end_inc)
-                    if dt_start.microsecond >= 500000:
-                        dt_start = dt_start + timedelta(seconds=1)
-                    dt_start = dt_start.replace(microsecond=0)
-                    record["datetime_start"] = "{}Z".format(dt_start.isoformat())
-                    record["datetime_end"] = "{}Z".format(dt_end.isoformat())
+                    record["north_degrees"] = lat["values"][-1]
+                    record["south_degrees"] = lat["values"][0]
+            if "lon" in axes:
+                lon = axes["lon"]
+                geo_units.append(lon["units"])
+                if 'values' not in lon.keys():
+                    record["east_degrees"] = lon['subaxes']['0']["values"][-1]
+                    record["west_degrees"] = lon['subaxes']['0']["values"][0]
+                else:
+                    record["east_degrees"] = lon["values"][-1]
+                    record["west_degrees"] = lon["values"][0]
+            if "time" in axes:
+                time_obj = axes["time"]
+                time_units = time_obj["units"]
+                tu_parts = []
+                if type(time_units) is str:
+                    tu_parts = time_units.split()
+                if len(tu_parts) > 2 and tu_parts[0] == "days" and tu_parts[1] == "since":
+                    proc_time = True
+                    tu_date = tu_parts[2]  # can we ignore time component?
+                    if "subaxes" in time_obj:
+                        subaxes = time_obj["subaxes"]
+                        sub_values = sorted([x for x in self.unpack_values(subaxes.values())])
 
-        if "plev" in axes:
-            plev = axes["plev"]
-            if "units" in plev and "values" in plev:
-                record["height_units"] = plev["units"]
-                record["height_top"] = plev["values"][0]
-                record["height_bottom"] = plev["values"][-1]
-    else:
-        eprint("WARNING: No axes extracted from data files")
+                        tu_start_inc = int(sub_values[0][0])
+                        tu_end_inc = int(sub_values[-1][-1])
+                    elif "values" in time_obj:
+                        tu_start_inc = time_obj["values"][0]
+                        tu_end_inc = time_obj["values"][-1]
+                    else:
+                        self.publog.warning("Time values not located...")
+                        proc_time = False
+                    if proc_time:
+                        try:
+                            days_since_dt = datetime.strptime(tu_date.split("T")[0], "%Y-%m-%d")
+                        except:
+                            tu_date = '0' + tu_date
+                            while len(tu_date.split('-')[0]) < 4:
+                                tu_date = '0' + tu_date
+                            days_since_dt = datetime.strptime(tu_date.split("T")[0], "%Y-%m-%d")
+                        dt_start = days_since_dt + timedelta(days=tu_start_inc)
+                        dt_end = days_since_dt + timedelta(days=tu_end_inc)
+                        if dt_start.microsecond >= 500000:
+                            dt_start = dt_start + timedelta(seconds=1)
+                        dt_start = dt_start.replace(microsecond=0)
+                        record["datetime_start"] = "{}Z".format(dt_start.isoformat())
+                        record["datetime_end"] = "{}Z".format(dt_end.isoformat())
 
+            if "plev" in axes:
+                plev = axes["plev"]
+                if "units" in plev and "values" in plev:
+                    record["height_units"] = plev["units"]
+                    record["height_top"] = plev["values"][0]
+                    record["height_bottom"] = plev["values"][-1]
+        else:
+            self.publog.warning("No axes extracted from data files")
 
-def iterate_files(dataset_rec, mapdata, scandata):
-    ret = []
-    sz = 0
-    last_file = None
+    def iterate_files(self, mapdata, scandata):
+        ret = []
+        sz = 0
+        last_file = None
 
-    for maprec in mapdata:
-        fullpath = maprec['file']
-        scanrec = scandata[fullpath]
-        file_rec = get_file(dataset_rec, maprec, scanrec)
-        last_file = file_rec
-        sz += file_rec["size"]
-        ret.append(file_rec)
-   
-    access = [x.split("|")[2] for x in last_file["url"]]
+        for maprec in mapdata:
+            fullpath = maprec['file']
+            if fullpath not in scandata.keys():
+                if not self.limit_exceeded and self.project != "CREATE-IP" and self.project != "cmip5":
+                    self.publog.warning("Autocurator data not found for file: " + fullpath)
+                continue
+            scanrec = scandata[fullpath]
+            file_rec = self.get_file(maprec, scanrec)
+            last_file = file_rec
+            sz += file_rec["size"]
+            ret.append(file_rec)
 
-    return ret, sz, access
+        lst = []
+        for x in last_file["url"]:
+            if x:
+                lst.append(x)
+        last_file["url"] = lst
+        access = [x.split("|")[2] for x in last_file["url"]]
 
-def get_records(mapdata, scanfilename, data_node, index_node, replica, xattrfn=None):
+        return ret, sz, access
 
-    if isinstance(mapdata, str):
-        mapobj = json.load(open(mapdata))
-    else:
-        mapobj = mapdata
-    scanobj = json.load(open(scanfilename))
+    def get_records(self, mapdata, scanfilename, xattrfn=None, user_project=None):
 
-    rec = get_dataset(mapobj[0][0], scanobj['dataset'], data_node, index_node, replica)
-    update_metadata(rec, scanobj)
-    rec["number_of_files"] = len(mapobj)  # place this better
+        self.user_project = user_project
+        self.load_xattr(xattrfn)
 
-    if xattrfn:
-        xattrobj = json.load(open(xattrfn))
-    else:
-        xattrobj = {}
+        if isinstance(mapdata, str):
+            mapobj = json.load(open(mapdata))
+        else:
+            mapobj = mapdata
+        scanobj = json.load(open(scanfilename))
 
-    if verbose:
-        print("rec = ")
-        print(json.dumps(rec, indent=4))
+        self.get_dataset(mapobj[0][0], scanobj)
+        self.update_metadata(self.dataset, scanobj)
+        self.dataset["number_of_files"] = len(mapobj)  # place this better
+        project = self.dataset['project']
+
+        self.proc_xattr(xattrfn)
+
+        self.publog.debug("Record:\n" + json.dumps(self.dataset, indent=4))
         print()
-    for key in xattrobj:
-        rec[key] = xattrobj[key]
 
-    project = rec['project']
-    mapdict = parse_map_arr(mapobj)
-    if verbose:
-        print('mapdict = ')
-        print(json.dumps(mapdict, indent=4))
+        self.mapconv.set_map_arr(mapobj)
+        mapdict = self.mapconv.parse_map_arr()
+
+        self.publog.debug('Mapfile dictionary:\n' + json.dumps(mapdict, indent=4))
         print()
-    scandict = get_scanfile_dict(scanobj['file'])
-    if verbose:
-        print('scandict = ')
-        print(json.dumps(scandict, indent=4))
+        scandict = self.get_scanfile_dict(scanobj['file'])
+        self.publog.debug('Autocurator Scanfile dictionary:\n' + json.dumps(scandict, indent=4))
         print()
-    ret, sz, access = iterate_files(rec, mapdict, scandict)
-    rec["size"] = sz
-    rec["access"] = access
-    ret.append(rec)
-    return ret
-
-
-def run(args):
-
-    global silent
-    global verbose
-    global data_roots
-    global dtn
-    global data_node
-    global globus
-    silent = args[8]
-    verbose = args[9]
-    data_roots = args[5]
-    globus = args[6]
-    dtn = args[7]
-    data_node = args[2]
-
-    if len(args) == 11:
-        ret = get_records(args[0], args[1], args[2], args[3], args[4], xattrfn=args[10])
-    else:
-        ret = get_records(args[0], args[1], args[2], args[3], args[4])
-    return ret
+        ret, sz, access = self.iterate_files(mapdict, scandict)
+        self.dataset["size"] = sz
+        self.dataset["access"] = access
+        ret.append(self.dataset)
+        return ret

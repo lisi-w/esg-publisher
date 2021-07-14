@@ -8,7 +8,7 @@ import configparser as cfg
 from shutil import copyfile
 
 
-VERSION = '5.1.0a2'
+VERSION = '5.0.0a7'
 print("esgcet version =", VERSION)
 HOME = str(Path.home())
 FULLPATH = HOME + '/.esg'
@@ -27,12 +27,7 @@ if config_exists:
     try:
         config = cfg.ConfigParser()
         config.read(FULLPATH + "/esg.ini")
-        if config['version'] != VERSION:
-            print("Config file not up to date, saving back up and overwriting original.", file=sys.stderr)
-            copyfile(FULLPATH + "/esg.ini", FULLPATH + "/esg.ini.bak")
-            make_config = True
-        else:
-            make_config = False
+        make_config = False
     except:
         print("Error with existing config, saving back up and overwriting original.", file=sys.stderr)
         copyfile(FULLPATH + "/esg.ini", FULLPATH + "/esg.ini.bak")
@@ -65,7 +60,7 @@ if make_config:
                                           'esgpublish=esgcet.pub_internal:main',
                                           'esgupdate=esgcet.esgupdate:main',
                                           'esgmapconv=esgcet.esgmapconv:main',
-                                          'esgmigrate=esgcet.migratecmd:main',
+                                          'esgmigrate=esgcet.esgmigrate:main',
                                           'esgunpublish=esgcet.esgunpublish:main']},
         data_files=[(FULLPATH, ['esg.ini'])]
 
@@ -94,6 +89,6 @@ else:
                                           'esgpublish=esgcet.pub_internal:main',
                                           'esgupdate=esgcet.esgupdate:main',
                                           'esgmapconv=esgcet.esgmapconv:main'
-                                          'esgmigrate=esgcet.migratecmd:main',
+                                          'esgmigrate=esgcet.esgmigrate:main',
                                           'esgunpublish=esgcet.esgunpublish:main']}
         )

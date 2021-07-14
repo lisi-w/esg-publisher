@@ -5,10 +5,6 @@ import json
 import argparse
 import configparser as cfg
 from pathlib import Path
-import esgcet.logger as logger
-
-log = logger.Logger()
-publog = log.return_logger('esgunpublish')
 
 
 def get_args():
@@ -34,17 +30,10 @@ def run():
     a = get_args()
     ini_file = a.cfg
     config = cfg.ConfigParser()
-    if not os.path.exists(ini_file):
-        publog.error("Config file not found. " + ini_file + " does not exist.")
-        exit(1)
-    if os.path.isdir(ini_file):
-        publog.error("Config file path is a directory. Please use a complete file path.")
-        exit(1)
     try:
         config.read(ini_file)
-    except Exception as ex:
-        publog.exception("Could not read config file")
-        exit(1)
+    except:
+        print("WARNING: no config file found.", file=sys.stderr)
 
     if a.cert == "./cert.pem":
         try:
@@ -58,7 +47,7 @@ def run():
         try:
             index_node = config['user']['index_node']
         except:
-            publog.exception("Index node not defined. Use the --index-node option or define in esg.ini.")
+            print("Index node not defined. Use the --index-node option or define in esg.ini.", file=sys.stderr)
             exit(1)
     else:
         index_node = a.index_node
@@ -67,7 +56,7 @@ def run():
         try:
             data_node = config['user']['data_node']
         except:
-            publog.exception("Data node not defined. Use the --data-node option or define in esg.ini.")
+            print("Data node not defined. Use the --data-node option or define in esg.ini.", file=sys.stderr)
             exit(1)
     else:
         data_node = a.data_node
@@ -82,7 +71,7 @@ def run():
     try:
         upub.run([dset_id, d, data_node, index_node, cert])
     except Exception as ex:
-        publog.exception("Failed to unpublish")
+        print("Error unpublishing: " + str(ex), file=sys.stderr)
         exit(1)
 
 

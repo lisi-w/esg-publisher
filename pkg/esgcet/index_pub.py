@@ -1,25 +1,40 @@
 from esgcet.pub_client import publisherClient
+import esgcet.logger as logger
 
-import esgcet.list2json, sys, json, os
-import configparser as cfg
-from pathlib import Path
-
-
-def run(args):
-
-    hostname = args[1]
-    cert_fn = args[2]
-    d = args[0]
-    silent = args[3]
-    verbose = args[4]
+log = logger.Logger()
 
 
-    pubCli = publisherClient(cert_fn, hostname, verbose=verbose)
+class ESGPubIndex:
 
-    for rec in d:
+    def __init__(self, hostname, cert_fn, verbose=False, silent=False, verify=False, auth=True):
+        self.silent = silent
+        self.verbose = verbose
+        self.pubCli = publisherClient(cert_fn, hostname, verify=verify, verbose=self.verbose, silent=self.silent, auth=auth)
+        self.publog = log.return_logger('Index Publication', silent, verbose)
 
-        new_xml = esgcet.list2json.gen_xml(rec)
-        if not silent:
-            print(new_xml)
-        pubCli.publish(new_xml)
+    def gen_xml(self, d):
+        out = []
+        out.append("<doc>\n")
+        for key in d:
+
+            val = d[key]
+            if key == "description":
+                val = ' '.join(val)
+                out.append('  <field name="{}">{}</field>\n'.format(key, val))
+            elif type(val) is list:
+                for vv in val:
+                    out.append('  <field name="{}">{}</field>\n'.format(key, vv))
+            else:
+                out.append('  <field name="{}">{}</field>\n'.format(key, val))
+        out.append("</doc>\n")
+        return ''.join(out)
+
+
+    def do_publish(self, dataset):
+
+        for rec in dataset:
+
+            new_xml = self.gen_xml(rec)
+            self.publog.debug(new_xml)
+            self.pubCli.publish(new_xml)
 

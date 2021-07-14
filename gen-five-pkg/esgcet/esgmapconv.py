@@ -1,14 +1,10 @@
+import esgcet.mapfile as mp
 import sys
-from esgcet.mapfile import ESGPubMapConv
 import json
 import os
 import configparser as cfg
 import argparse
 from pathlib import Path
-import esgcet.logger as logger
-
-log = logger.Logger()
-publog = log.return_logger('esgmapconv')
 
 
 def get_args():
@@ -30,22 +26,14 @@ def run():
     a = get_args()
     ini_file = a.cfg
     config = cfg.ConfigParser()
-    if not os.path.exists(ini_file):
-        publog.error("Config file not found. " + ini_file + " does not exist.")
-        exit(1)
-    if os.path.isdir(ini_file):
-        publog.error("Config file path is a directory. Please use a complete file path.")
-        exit(1)
-    try:
-        config.read(ini_file)
-    except Exception as ex:
-        publog.exception("Could not read config file")
-        exit(1)
+    config.read(ini_file)
 
     p = True
     if a.out_file is not None:
         p = False
         outfile = a.out_file
+
+
 
     proj = None
     if a.proj != "":
@@ -59,23 +47,22 @@ def run():
     try:
         fullmap = a.map
     except:
-        publog.exception("Argparse error. Exiting.")
+        print("Error with argparse. Exiting.", file=sys.stderr)
         exit(1)
-
-    mapconv = ESGPubMapConv(fullmap)
-    map_json_data = None
     try:
-        map_json_data = mapconv.mapfilerun()
-
+        if proj:
+            map_json_data = mp.run([fullmap, proj])
+        else:
+            map_json_data = mp.run([fullmap])
     except Exception as ex:
-        publog.exception("Failed to convert mapfile")
+        print("Error with converting mapfile: " + str(ex), file=sys.stderr)
         exit(1)
 
     if p:
-        print(json.dumps(map_json_data))
+        print(json.dumps(map_json_data, indent=4))
     else:
         with open(outfile, 'w') as of:
-            json.dump(map_json_data, of)
+            json.dump(map_json_data, of, indent=4)
 
 
 def main():

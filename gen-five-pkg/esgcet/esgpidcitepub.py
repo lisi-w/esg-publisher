@@ -1,14 +1,10 @@
-from esgcet.pid_cite_pub import ESGPubPidCite
+import esgcet.pid_cite_pub as pid
 import argparse
 import sys
 import json
 from pathlib import Path
 import configparser as cfg
 import os
-import esgcet.logger as logger
-
-log = logger.Logger()
-publog = log.return_logger('esgpidcitepub')
 
 
 def get_args():
@@ -23,8 +19,6 @@ def get_args():
                         help="Optional output file destination. Default is stdout.")
     parser.add_argument("--silent", dest="silent", action="store_true", help="Enable silent mode.")
     parser.add_argument("--verbose", dest="verbose", action="store_true", help="Enable verbose mode.")
-    parser.add_argument("--test", dest="test", action="store_true",
-                        help="PID registration will run in 'test' mode. Use this mode unless you are performing 'production' publications.")
 
     pub = parser.parse_args()
 
@@ -36,18 +30,6 @@ def run():
     ini_file = a.cfg
     config = cfg.ConfigParser()
     config.read(ini_file)
-    if not os.path.exists(ini_file):
-        publog.error("Config file not found. " + ini_file + " does not exist.")
-        exit(1)
-    if os.path.isdir(ini_file):
-        publog.error("Config file path is a directory. Please use a complete file path.")
-        exit(1)
-    try:
-        config.read(ini_file)
-    except Exception as ex:
-        publog.exception("Could not read config file")
-        exit(1)
-
 
     p = True
     if a.out_file is not None:
@@ -58,7 +40,7 @@ def run():
         try:
             data_node = config['user']['data_node']
         except:
-            publog.exception("Data node not supplied in config or command line. Exiting.")
+            print("Error: data node not supplied in config or command line. Exiting.", file=sys.stderr)
             exit(1)
 
     if not a.silent:
@@ -89,41 +71,34 @@ def run():
         try:
             data_node = config['user']['data_node']
         except:
-            publog.exception("Data node not supplied in config or command line. Exiting.")
+            print("Error: data node not supplied in config or command line. Exiting.", file=sys.stderr)
             exit(1)
     else:
         data_node = a.data_node
 
-    test = False
-    if a.test:
-        test = True
-
     try:
         pid_creds = json.loads(config['user']['pid_creds'])
     except:
-        publog.exception("PID credentials not defined. Define in config file esg.ini.")
+        print("PID credentials not defined. Define in config file esg.ini.", file=sys.stderr)
         exit(1)
 
     try:
         out_json_data = json.load(open(a.json_data))
     except:
-        publog.exception("Could not open JSON file. Exiting.")
+        print("Error opening JSON file. Exiting.", file=sys.stderr)
         exit(1)
 
-    pid = ESGPubPidCite(out_json_data, pid_creds, data_node, test=test, silent=silent,
-                        verbose=verbose)
-
     try:
-        new_json_data = pid.do_pidcite()
+        new_json_data = pid.run([out_json_data, data_node, pid_creds, silent, verbose])
     except Exception as ex:
-        publog.exception("Failed assigning pid or running activity check")
+        print("Error running pid cite: " + str(ex), file=sys.stderr)
         exit(1)
 
     if p:
-        print(json.dumps(new_json_data))
+        print(json.dumps(new_json_data, indent=4))
     else:
         with open(outfile, 'w') as of:
-            json.dump(new_json_data, of)
+            json.dump(new_json_data, of, indent=4)
 
 
 def main():
