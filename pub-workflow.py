@@ -294,11 +294,12 @@ def main():
                         if ".part" in log:
                             continue
                         print(date + " error " + fullmap, file=sys.stderr, flush=True)
-                        errata = check_errata(fn)
-                        latest_rc = check_latest(fn)
+                        iid = fn[:-8]
+                        errata = check_errata(iid)
+                        latest_rc = check_latest(iid)
                         if latest_rc == "error":
                             time.sleep(120)
-                            latest_rc = check_latest(fn)
+                            latest_rc = check_latest(iid)
                         if errata:
                             shutil.move(fullmap, FAIL_DIR + "errata/" + m)
                             shutil.move(log, ERROR_LOGS + "errata/" + l)
