@@ -105,6 +105,8 @@ class PublisherArgs:
         if pub.cert == "./cert.pem":
             try:
                 cert = config['user']['cert']
+                if 'optional' in cert:
+                    cert = pub.cert
             except:
                 cert = pub.cert
         else:

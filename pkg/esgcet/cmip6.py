@@ -23,7 +23,7 @@ class cmip6(GenericPublisher):
         self.cmor_tables = argdict["cmor_tables"]
         self.test = argdict["test"]
         if self.replica:
-            self.skip_prepare = argdict["skip-prepare"]
+            self.skip_prepare = argdict["skip_prepare"]
         else:
             self.skip_prepare = False
         self.publog = log.return_logger('CMIP6', self.silent, self.verbose)
