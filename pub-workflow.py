@@ -24,7 +24,7 @@ ERR_PREFIX = "/p/user_pub/publish-queue/CMIP6-maps-err/"
 TAR_DIR = "/p/user_pub/publish-queue/CMIP6-map-tarballs/"
 
 CMOR_PATH = "/export/witham3/cmor"
-DEBUG = True
+DEBUG = False
 
 
 def run_ac(input_rec):
