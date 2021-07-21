@@ -24,7 +24,7 @@ ERR_PREFIX = "/p/user_pub/publish-queue/CMIP6-maps-err/"
 TAR_DIR = "/p/user_pub/publish-queue/CMIP6-map-tarballs/"
 
 CMOR_PATH = "/export/witham3/cmor"
-DEBUG = False
+DEBUG = True
 
 
 def run_ac(input_rec):
@@ -145,7 +145,7 @@ def archive_maps(files):
     # tar command
     tar_job = subprocess.Popen(["tar", "-czf", TAR_DIR + fn, SUCCESS_DIR])
     try:
-        tar_job.wait(timeout=3600)
+        tar_job.wait(timeout=600)
     except Exception as ex:
         print("ERROR: could not archive mapfiles: " + str(ex), file=sys.stderr, flush=True)
         return
@@ -189,11 +189,13 @@ def main():
             try:
                 files = os.listdir("/p/user_pub/publish-queue/CMIP6-maps-err")
                 count = len(files)
-                if count == 5:
+                if count == 6:
                     print("No unsorted errors left to retry.", file=sys.stderr, flush=True)
                     errs_done = True
                     redo_errs = False
                     continue
+                else:
+                    count -= 6
             except:
                 print("Filesystem error likely. Will attempt to resume in 5 minutes.", file=sys.stderr, flush=True)
                 time.sleep(300)
@@ -223,6 +225,9 @@ def main():
                 elif "greyworm" in f:
                     os.remove(fullmap)
                     continue
+                elif f == files[-1]:
+                    send_msg("Infinite loop detected, filename: " + f, 'e.witham@columbia.edu')
+                    exit(1)
                 else:
                     continue
             else:
@@ -261,6 +266,7 @@ def main():
                     autoc = False
                     pid = False
                     server = False
+                    ac = True
                     filesystem = False
                     fullmap = maps[n]
                     if timeout[n]:
@@ -282,8 +288,9 @@ def main():
                                 autoc = True
                             if "Unable to open data" in line:
                                 autoc = True
-                            if "Failed ac check" in line or "Failed ec check" in line:
+                            if "activity check failed" in line:
                                 print("WARNING: Failed activity check or experiment id check", file=sys.stderr, flush=True)
+                                ac = True
                         l.write(date)
                     fn = log.split("/")[-1]
                     m = fn[:-4]
@@ -316,6 +323,9 @@ def main():
                             gotosleep = True
                         elif server:
                             print("server error", file=sys.stderr, flush=True)
+                        elif ac:
+                            shutil.move(fullmap, FAIL_DIR + "activity_check/" + m)
+                            shutil.move(log, ERROR_LOGS + "activity_check/" + l)
                         elif autoc:
                             print("autocurator error", file=sys.stderr, flush=True)
                             try:
@@ -329,6 +339,9 @@ def main():
                                 else:
                                     send_msg(str(ex), 'e.witham@columbia.edu')
                                     exit(1)
+                        elif redo_errs:
+                            shutil.move(fullmap, FAIL_DIR + "misc/" + m)
+                            shutil.move(log, ERROR_LOGS + "misc/" + l)
                         else:
                             try:
                                 shutil.move(fullmap, FAIL_DIR + m)
@@ -357,6 +370,7 @@ def main():
                 maps = []
                 check_flag()
                 if redo_errs:
+                    print("Finished rechecking errors.", file=sys.stderr, flush=True)
                     redo_errs = False
                     errs_done = True
                 if gotosleep:

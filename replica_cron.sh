@@ -3,6 +3,8 @@
 bash /export/witham3/esgf/conda.sh
 . ~/.bashrc
 conda activate replica-pub
+cd /export/witham3/cmip6-cmor-tables
+git pull
 cd /export/witham3/pub-internal
 running=`ps -fe | grep pub-workflow | wc -l`
 lastlog=`ls /esg/log/publisher/main/*.log | tail -n 1`
